@@ -1,0 +1,50 @@
+PERIOD: 	80000
+TIMEOUT: 	80000
+NUMPAQUETES: 	300
+PACKET_SIZE_TRESHOLD: 	1350
+F_MAX_PERIOD: 	256
+num paq entrada: 	99999
+num paq salida: 	6476
+relación num paq (tanto por uno): 	0.064761
+media num paq multiplexados: 	15.3895
+duracion entrada (useg): 	519823656
+duracion salida (useg): 	519680000
+paq/seg entrada: 	192.371
+paq/seg salida: 	12.4615
+relación paq/seg: 	0.064779
+tamaño medio paq IP entrada: 	68.8682
+tamaño medio paq IP salida: 	331.9741
+BW entrada bps nivel IP: 	105985.9269
+BW salida bps nivel IP: 	33095.197
+BW entrada bps nivel eth: 	124453.5435
+BW salida bps nivel eth: 	34291.5025
+relación BW (tanto por uno): 	0.31226
+Retention time medio (useg): 	39828.5374
+Stdev del retention time (useg): 	23050.5058
+retention time maximo (useg): 	80000
+percentil 95: 	76019.55
+percentil 99: 	79615.505
+percentil 99.5: 	79214
+percentil 99.9: 	79930.505
+percentil 100: 	80000
+proporcion ciclos sin enviar: 	0.0032319
+proporcion ciclos con1 paq enviados: 	0.0047708
+proporcion ciclos con2 paq enviados: 	0.0043091
+proporcion ciclos con3 paq enviados: 	0.0032319
+proporcion ciclos con4 paq enviados: 	0.0032319
+proporcion ciclos con5 paq enviados: 	0.0023085
+proporcion ciclos con6 paq enviados: 	0.0041552
+proporcion ciclos con7 paq enviados: 	0.0081566
+proporcion ciclos con8 paq enviados: 	0.014466
+proporcion ciclos con9 paq enviados: 	0.022161
+proporcion ciclos con10 paq enviados: 	0.034781
+proporcion ciclos con11 paq enviados: 	0.052017
+proporcion ciclos con12 paq enviados: 	0.062329
+proporcion ciclos con13 paq enviados: 	0.08372
+proporcion ciclos con14 paq enviados: 	0.098495
+proporcion ciclos con15 paq enviados: 	0.10142
+proporcion ciclos con16 paq enviados: 	0.10465
+proporcion ciclos con17 paq enviados: 	0.094955
+proporcion ciclos con18 paq enviados: 	0.076949
+proporcion ciclos con19 paq enviados: 	0.064329
+proporcion ciclos con20 paq enviados: 	0.053403
