@@ -1,0 +1,145 @@
+%% Modelo de tráfico de World of Warcraft
+%  según Svoboda
+
+clear all
+close all
+
+%% Datos
+
+eq1_lambda=426;
+eq1_k=0.8196;
+eq1_l=3010;
+eq2_a=218.3e-3;
+eq2_b=251.2e-3;
+eq2_c=1500e-3;
+eq3_a=6;
+eq3_b=19;
+eq3_c=43;
+eq1_lambda_t_sesion=4321;
+eq1_k_t_sesion=0.7813;
+eq4_mu=5.512;
+eq4_theta=2.434;
+cantidad_paquetes_sc=10000;
+cantidad_paquetes_cs=10000;
+fragmentar=1; % 0:No fragmentar  1:fragmentar
+
+%%%%%%%%%%%%%%%% NUMERO JUGADORES %%%%%%%%%%%%%%%%%
+jugadores = 20;
+
+%%%%%%%%%%%%%%% JUEGO QUE SE GENERA %%%%%%%%%%%%%%%
+nombre_juego = 'halo2'; %con 3000 valores da 120 seg
+%nombre_juego = 'unreal1.0'; %con 5000 valores da 125 seg
+%nombre_juego = 'quake2'; %con 5000 valores da 160 seg
+%% Server to Client
+
+% Generando tamaños de paquetes completos de hasta 3010 bytes en columna 1
+tamanos_sc_grande(:,1)=floor(wblrnd(eq1_lambda,eq1_k,[1 cantidad_paquetes_sc]));
+for i=1:cantidad_paquetes_sc
+    if tamanos_sc_grande(i,1)>3010
+        while tamanos_sc_grande(i,1)>3010
+            tamanos_sc_grande(i,1)=floor(wblrnd(eq1_lambda,eq1_k));
+        end
+    end
+    if tamanos_sc_grande(i,1)==0
+        while tamanos_sc_grande(i,1)==0
+            tamanos_sc_grande(i,1)=floor(wblrnd(eq1_lambda,eq1_k));
+        end
+    end
+end
+
+% Generando los tiempos entre paquetes en columna 2
+for i=1:length(tamanos_sc_grande)
+    cont1=random('unif',0,1);
+    if cont1<=0.123
+        tamanos_sc_grande(i,2)=random('unif',eq2_b,eq2_c);
+    else
+        if cont1<0.38
+            tamanos_sc_grande(i,2)=random('unif',eq2_a,eq2_b);
+        else
+            if cont1<1
+                tamanos_sc_grande(i,2)=random('unif',0,eq2_a);
+            end
+        end
+    end
+end
+
+%% Client to Server
+
+% Generando tamaños de paquetes en columna 1
+tamanos_cs=zeros(cantidad_paquetes_cs,2);
+for i=1:length(tamanos_cs)
+    cont1=random('unif',0,1);
+    if cont1<=0.14
+        tamanos_cs(i)=eq3_b;
+    else
+        if cont1<0.48
+            tamanos_cs(i)=eq3_c;
+        else
+            if cont1<1
+                tamanos_cs(i)=eq3_a;
+            end
+        end
+    end
+end
+
+% Generando los tiempos entre paquetes en columna 2
+for i=1:length(tamanos_cs)
+    cont1=random('unif',0,1);
+    if cont1<=0.123
+        tamanos_cs(i,2)=random('unif',eq2_b,eq2_c);
+    else
+        if cont1<0.38
+            tamanos_cs(i,2)=random('unif',eq2_a,eq2_b);
+        else
+            if cont1<1
+                tamanos_cs(i,2)=random('unif',0,eq2_a);
+            end
+        end
+    end
+end
+
+%% Fragmentación de paquetes
+
+tamanos_sc=zeros(cantidad_paquetes_cs,2);
+if fragmentar==1
+    j=1;
+    for i=1:length(tamanos_sc_grande)
+        if tamanos_sc_grande(i,1)<1460
+            tamanos_sc(j,1)=tamanos_sc_grande(i,1);
+            tamanos_sc(j,2)=tamanos_sc_grande(i,2);
+            j=j+1;
+        else
+            if tamanos_sc_grande(i,1)-1460<=1460 
+                tamanos_sc(j,1)=1460;
+                tamanos_sc(j+1,1)=tamanos_sc_grande(i,1)-1460;
+                tamanos_sc(j,2)=tamanos_sc_grande(i,2);
+                tamanos_sc(j+1,2)=tamanos_sc_grande(i,2)+50e-6; % Los fragmentos llevan un reterdo de 50 mico segundos entre ellos
+                j=j+2;
+            else
+                tamanos_sc(j,1)=1460;
+                tamanos_sc(j+1,1)=1460;
+                tamanos_sc(j+2,1)=tamanos_sc_grande(i,1)-1460-1460;
+                tamanos_sc(j,2)=tamanos_sc_grande(i,2);
+                tamanos_sc(j+1,2)=tamanos_sc_grande(i,2)+50e-6; % Los fragmentos llevan un reterdo de 50 mico segundos entre ellos
+                tamanos_sc(j+2,2)=tamanos_sc_grande(i,2)+50e-6+50e-6; % Los fragmentos llevan un reterdo de 50 mico segundos entre ellos
+                j=j+3;
+            end
+        end
+    end
+else
+    tamanos_sc=tamanos_sc_grande;
+end
+
+%% Creando archivos
+
+tamanos_sc(:,2)=tamanos_sc(:,2)*1e6;
+tamanos_cs(:,2)=tamanos_cs(:,2)*1e6;
+dlmwrite('trafico_sever_client.txt',tamanos_sc,'delimiter','\t','newline', 'pc','precision','%.0f');
+dlmwrite('trafico_client_server.txt',tamanos_cs,'delimiter','\t','newline', 'pc','precision','%.0f');
+
+%% Gráficos para comprobación de archivos
+
+figure(1);wblplot(tamanos_sc(:,2))
+figure(2);cdfplot(tamanos_sc(:,2))
+figure(3);wblplot(tamanos_cs(:,2))
+figure(4);cdfplot(tamanos_cs(:,2))

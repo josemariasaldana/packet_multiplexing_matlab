@@ -1,0 +1,152 @@
+%versión 22/11/2010
+%TIMEOUT=15000;  %tiempo maximo para enviar paquetes en microseg
+%NUMPAQUETES=300;   %numero maximo de paquetes a agrupar
+%PACKET_SIZE_TRESHOLD=1350;  %numero de bytes maximos del paquete. Cuando se supera, envía
+
+PERIOD=50000; %tiempo entre envíos en microseg
+NUMPAQUETES=0;   %numero maximo de paquetes a agrupar
+PACKET_SIZE_TRESHOLD=0;  %numero de bytes maximos del paquete. Cuando se supera, envía
+
+%COMMON_HEADER=25;
+%MUX_HEADER=2;
+%QUITAR_HEADER=28 ;   %lo que hay que quitar para el generador de tráfico
+
+salida=[];
+num_acumulados=0;    %numero paquetes en espera de ser enviados
+tam_acumulado=0;     %tamaño acumulado del payload del paquete a multiplexar
+
+%variables para almacenar el número de ciclos en que no se envía nada y el
+%número de ciclos en que se envía 1, 2, 3, 4 paquetes
+%num_ciclos_en_blanco=0;
+%num_ciclos_con_n_paquetes=zeros(30);
+
+%añado a entrada una sexta fila. la relleno con -1 para decir que ese
+%paquete aún no se ha enviado. Pondré ahí el retention time
+entrada(:,6)=-1*ones(length(entrada(:,1)),1);
+
+%añado una séptima fila para poner el momento del envío
+entrada(:,7)=zeros(length(entrada(:,1)),1);
+%relleno la séptima fila con el instante en que se enviará
+for m=1:length(entrada(:,1))
+    %añado el tiempo de envío
+    entrada(m,7)=PERIOD*(1+floor(entrada(m,1)/PERIOD));
+    %añado el retention time
+    entrada(m,6)=entrada(m,7)-entrada(m,1);
+end
+
+%calculo el número de periodos que hay según la duración
+num_periodos = 1 + floor(entrada(length(entrada(:,1)))/ PERIOD);
+
+instante_envio = entrada(1,6);
+tam_acumulado = entrada(1,2) + entrada(1,4);
+num_acumulados = 1;
+for m=2:length(entrada(:,1))
+    %si el momento de envío coincide con el del anterior, no envío
+    if entrada(m,7)== entrada(m-1,7)
+       tam_acumulado = tam_acumulado + entrada(m,2) + entrada(m,4);
+       num_acumulados = num_acumulados + 1;
+       
+    %si no coinciden, tengo que enviar los anteriores
+    else
+       if num_acumulados == 1 %sólo ha llegado uno durante el PERIODO
+           %no lo multiplexo. Lo envio tal cual
+           salida = [salida ; entrada(m-1,7) tam_acumulado-entrada(m-1,4) num_acumulados];
+           %num_ciclos_con_n_paquetes(1)=num_ciclos_con_n_paquetes(1)+1;
+           
+       else %ha llegado más de uno.
+           %los multiplexo
+           salida = [salida ; entrada(m-1,7) tam_acumulado+(num_acumulados*MUX_HEADER)+COMMON_HEADER-QUITAR_HEADER num_acumulados];
+           %num_ciclos_con_n_paquetes(num_acumulados)=num_ciclos_con_n_paquetes(num_acumulados)+1;
+       end    
+       num_acumulados=1;
+       tam_acumulado=entrada(m,2)+entrada(m,4);
+    end
+end
+
+%envío los que quedan
+if num_acumulados == 1 %sólo ha llegado uno durante el PERIODO
+    %no lo multiplexo. Lo envio tal cual
+    salida = [salida ; entrada(m-1,7) tam_acumulado-entrada(m-1,4) num_acumulados];
+    %num_ciclos_con_n_paquetes(1)=num_ciclos_con_n_paquetes(1)+1;
+else %ha llegado más de uno.
+    %los multiplexo
+    salida = [salida ; entrada(m-1,7) tam_acumulado+(num_acumulados*MUX_HEADER)+COMMON_HEADER-QUITAR_HEADER num_acumulados];
+    %num_ciclos_con_n_paquetes(num_acumulados)=num_ciclos_con_n_paquetes(num_acumulados)+1;
+end
+
+   
+%añado una columna de ceros para poner la diferencia de tiempos
+salida=[salida zeros(length(salida(:,1)),1)]; 
+for i=1:length(salida(:,1))-1
+    salida(i,4)=salida(i+1,1)-salida(i,1);
+end
+
+%preparo la parte común del nombre de los ficheros de salida
+nombre_archivos_salida = strcat(nombre_archivos,'_PERIOD_',num2str(PERIOD));
+%escribo el fichero de tiempos absolutos de envío
+%dlmwrite(strcat(nombre_archivos_salida,'_time.txt'),salida(:,1),'newline', 'pc','precision','%i');
+%escribo el fichero de diferencias de tiempos de envío
+dlmwrite(strcat(nombre_archivos_salida,'_diftime.txt'),salida(:,4),'newline', 'pc','precision','%i');
+%escribo el fichero de tamaños de salida (en payload UDP).
+% Hay que sumarle 28 para obtener el tamaño IP
+dlmwrite(strcat(nombre_archivos_salida,'_size.txt'),salida(:,2),'newline', 'pc');
+
+%calculo el ancho de banda del fichero de entrada en bps a nivel IP.
+%Sumo 28 al payload, por las cabeceras IP y UDP
+%multiplico por 1000000 porque el tiempo son microsegundos
+%multiplico por 8 para pasar de bytes a bits
+BW_entrada = 8*1000000*sum(28+entrada(:,2))/(entrada(length(entrada),1)-entrada(1,1));
+BW_salida = 8*1000000*sum(28+salida(:,2))/(salida(length(salida),1)-salida(1,1));
+
+%calculo el BW a nivel 2: ETH
+BW_entrada_eth = 8*1000000*sum(ETH_HEADER_SIZE+28+entrada(:,2))/(entrada(length(entrada),1)-entrada(1,1));
+BW_salida_eth = 8*1000000*sum(ETH_HEADER_SIZE+28+salida(:,2))/(salida(length(salida),1)-salida(1,1));
+
+%calculo la duración del fichero de entrada y salida
+duracion_entrada = entrada(length(entrada))-entrada(1,1);
+duracion_salida = salida(length(salida))-salida(1,1);
+
+%calculo los paquetes por segundo de entrada y salida
+pps_entrada = 1000000*length(entrada(:,1))/(entrada(length(entrada))-entrada(1,1));
+pps_salida = 1000000*length(salida(:,1))/(salida(length(salida))-salida(1,1));
+
+%calculo el tamaño medio a nivel IP del paquete de entrada y salida
+tam_paq_IP_entrada = 28 + mean (entrada(:,2));
+tam_paq_IP_salida = 28 + mean (salida(:,2));
+
+% Escribo en un fichero las estadísticas
+file_estadisticas = fopen(strcat(nombre_archivos_salida,'_estadisticas.txt'),'w');
+
+%escribo los parámetros de entrada
+fprintf(file_estadisticas,strcat('PERIOD: \t',num2str(PERIOD),'\n'));
+fprintf(file_estadisticas,strcat('NUMPAQUETES: \t',num2str(NUMPAQUETES),'\n'));
+fprintf(file_estadisticas,strcat('PACKET_SIZE_TRESHOLD: \t',num2str(PACKET_SIZE_TRESHOLD),'\n'));
+fprintf(file_estadisticas,strcat('F_MAX_PERIOD: \t',num2str(F_MAX_PERIOD),'\n'));
+
+%escribo los resultados que salen
+fprintf(file_estadisticas,strcat('num paq entrada: \t',num2str(length(entrada(:,1))),'\n'));
+fprintf(file_estadisticas,strcat('num paq salida: \t',num2str(length(salida(:,1))),'\n'));
+fprintf(file_estadisticas,strcat('relación num paq (tanto por uno): \t',num2str(length(salida(:,1))/length(entrada(:,1))),'\n'));
+fprintf(file_estadisticas,strcat('media num paq multiplexados: \t',num2str(length(entrada(:,1))/length(salida(:,1))),'\n'));
+fprintf(file_estadisticas,strcat('duracion entrada (useg): \t',num2str(duracion_entrada),'\n'));
+fprintf(file_estadisticas,strcat('duracion salida (useg): \t',num2str(duracion_salida),'\n'));
+fprintf(file_estadisticas,strcat('paq/seg entrada: \t',num2str(pps_entrada),'\n'));
+fprintf(file_estadisticas,strcat('paq/seg salida: \t',num2str(pps_salida),'\n'));
+fprintf(file_estadisticas,strcat('relación paq/seg: \t',num2str(pps_salida/pps_entrada),'\n'));
+fprintf(file_estadisticas,strcat('tamaño medio paq IP entrada: \t',num2str(tam_paq_IP_entrada),'\n'));
+fprintf(file_estadisticas,strcat('tamaño medio paq IP salida: \t',num2str(tam_paq_IP_salida),'\n'));
+fprintf(file_estadisticas,strcat('BW entrada bps nivel IP: \t',num2str(BW_entrada),'\n'));
+fprintf(file_estadisticas,strcat('BW salida bps nivel IP: \t',num2str(BW_salida),'\n'));
+fprintf(file_estadisticas,strcat('BW entrada bps nivel eth: \t',num2str(BW_entrada_eth),'\n'));
+fprintf(file_estadisticas,strcat('BW salida bps nivel eth: \t',num2str(BW_salida_eth),'\n'));
+fprintf(file_estadisticas,strcat('relación BW (tanto por uno): \t',num2str(BW_salida/BW_entrada),'\n'));
+fprintf(file_estadisticas,strcat('Retention time medio (useg): \t',num2str(mean(entrada(:,6))),'\n'));
+fprintf(file_estadisticas,strcat('Stdev del retention time (useg): \t',num2str(sqrt(var(entrada(:,6)))),'\n'));
+fprintf(file_estadisticas,strcat('retention time maximo (useg): \t',num2str(max(entrada(:,6))),'\n'));
+fprintf(file_estadisticas,strcat('proporcion ciclos sin enviar: \t',num2str(1-(length(salida(:,1))/num_periodos)),'\n'));
+%escribo el número de ciclos en que se ha enviado un número de paquetes
+for u=1:10
+    fprintf(file_estadisticas,strcat('proporcion ciclos con ',num2str(u),' paq enviados: \t',num2str(length(find(salida(:,3)==u))/num_periodos),'\n'));
+end
+
+fclose(file_estadisticas);

@@ -1,0 +1,96 @@
+%versión 13/12/2010
+%TIMEOUT=15000;  %tiempo maximo para enviar paquetes en microseg
+%NUMPAQUETES=300;   %numero maximo de paquetes a agrupar
+%PACKET_SIZE_TRESHOLD=1350;  %numero de bytes maximos del paquete. Cuando se supera, envía
+
+%PERIOD=35000; %tiempo entre envíos en microseg
+NUMPAQUETES=0;   %numero maximo de paquetes a agrupar
+PACKET_SIZE_TRESHOLD=0;  %numero de bytes maximos del paquete. Cuando se supera, envía
+
+%COMMON_HEADER=25;
+%MUX_HEADER=2;
+%QUITAR_HEADER=28 ;   %lo que hay que quitar para el generador de tráfico
+
+salida=[];
+num_acumulados=0;    %numero paquetes en espera de ser enviados
+tam_acumulado=0;     %tamaño acumulado del payload del paquete a multiplexar
+
+%añado a entrada una sexta fila. la relleno con -1 para decir que ese
+%paquete aún no se ha enviado. Pondré ahí el retention time
+entrada(:,6)=-1*ones(length(entrada(:,1)),1);
+
+%añado una séptima fila para poner el momento del envío
+entrada(:,7)=zeros(length(entrada(:,1)),1);
+
+%relleno la séptima fila con el instante en que se enviará
+for m=1:length(entrada(:,1))
+    %añado el tiempo de envío
+    entrada(m,7)=PERIOD*(1+floor(entrada(m,1)/PERIOD));
+    %añado el retention time
+    entrada(m,6)=entrada(m,7)-entrada(m,1);
+end
+
+%calculo el número de periodos que hay según la duración del fichero de
+%entrada (el último valor de la primera columna)
+num_periodos = 1 + floor(entrada(length(entrada(:,1)))/ PERIOD);
+
+%empiezo por el primer paquete de entrada
+instante_envio = entrada(1,6);
+tam_acumulado = entrada(1,2) + entrada(1,4);
+num_acumulados = 1;
+
+%para cada paquete de entrada
+for m=2:length(entrada(:,1))
+    %si el momento de envío coincide con el del anterior, no envío y
+    %acumulo el tamaño y el número de paquetes
+    if entrada(m,7)== entrada(m-1,7)
+       tam_acumulado = tam_acumulado + entrada(m,2) + entrada(m,4);
+       num_acumulados = num_acumulados + 1;
+       
+    %si no coinciden, tengo que enviar los acumulados
+    else
+       if num_acumulados == 1 %sólo ha llegado uno durante el PERIODO
+           %no lo multiplexo. Lo envio tal cual
+           %añado una fila a la matriz salida
+           salida = [salida ; entrada(m-1,7) tam_acumulado-entrada(m-1,4) num_acumulados];
+           
+       else %ha llegado más de uno.
+           %los multiplexo
+           %añado una fila a la matriz salida
+           salida = [salida ; entrada(m-1,7) tam_acumulado+(num_acumulados*MUX_HEADER)+COMMON_HEADER-QUITAR_HEADER num_acumulados];
+       end    
+       num_acumulados=1;
+       tam_acumulado=entrada(m,2)+entrada(m,4);
+    end
+end
+
+%envío los que quedan pendientes
+if num_acumulados == 1 %sólo ha llegado uno durante el PERIODO
+    %no lo multiplexo. Lo envio tal cual
+    salida = [salida ; entrada(m-1,7) tam_acumulado-entrada(m-1,4) num_acumulados];
+else %ha llegado más de uno.
+    %los multiplexo
+    salida = [salida ; entrada(m-1,7) tam_acumulado+(num_acumulados*MUX_HEADER)+COMMON_HEADER-QUITAR_HEADER num_acumulados];
+end
+
+%calculo la cuarta columna de la matriz salida: diferencia de tiempos en
+%que sale.
+%añado una columna de ceros para poner la diferencia de tiempos
+salida=[salida zeros(length(salida(:,1)),1)]; 
+for i=1:length(salida(:,1))-1
+    salida(i,4)=salida(i+1,1)-salida(i,1);
+end
+
+%preparo la parte común del nombre de los ficheros de salida
+nombre_archivos_salida = strcat(nombre_archivos,'_PERIOD_',num2str(PERIOD));
+
+%escribo el fichero de tiempos absolutos de envío
+%dlmwrite(strcat(nombre_archivos_salida,'_time.txt'),salida(:,1),'newline', 'pc','precision','%i');
+
+%escribo el fichero de diferencias de tiempos de envío
+dlmwrite(strcat(nombre_archivos_salida,'_diftime.txt'),salida(:,4),'newline', 'pc','precision','%i');
+
+%escribo el fichero de tamaños de salida (en payload UDP).
+% Habrá que sumarle 28 para obtener el tamaño IP
+dlmwrite(strcat(nombre_archivos_salida,'_size.txt'),salida(:,2),'newline', 'pc');
+

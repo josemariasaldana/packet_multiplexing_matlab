@@ -1,0 +1,84 @@
+%versión 24/11/2010
+%TIMEOUT=10000;  %tiempo maximo para enviar paquetes en microseg
+NUMPAQUETES=300;   %numero maximo de paquetes a agrupar
+PACKET_SIZE_TRESHOLD=1350;  %numero de bytes maximos del paquete. Cuando se supera, envía
+
+%COMMON_HEADER=25;
+%MUX_HEADER=2;
+%QUITAR_HEADER=28 ;   %lo que hay que quitar para el generador de tráfico
+
+salida=[];
+num_acumulados=0;    %numero paquetes en espera de ser enviados
+tam_acumulado=0;     %tamaño acumulado del payload del paquete a multiplexar
+ultimo_envio=0;      %instante ultimo envío
+
+%añado a entrada una sexta fila. la relleno con -1 para decir que ese
+%paquete aún no se ha enviado
+entrada=[entrada -1*ones(length(entrada(:,1)),1)];
+
+%añado una séptima fila para poner el momento del envío
+entrada(:,7)=zeros(length(entrada(:,1)),1);
+
+for i=1:length(entrada(:,1))
+   instante=entrada(i,1);   %momento actual 
+   if (i<length(entrada(:,1)))  %si no estamos en el último paquete
+       instante_siguiente=entrada(i+1,1);
+   end
+   tam_acumulado=tam_acumulado + entrada(i,2) + entrada(i,4);
+   num_acumulados=num_acumulados + 1;
+   
+   if ~(((instante-ultimo_envio) >= TIMEOUT)||(NUMPAQUETES == num_acumulados)||(tam_acumulado+(num_acumulados*MUX_HEADER)+COMMON_HEADER >= PACKET_SIZE_TRESHOLD))
+       %no se envía. queda en espera
+       %num_acumulados=num_acumulados+1 %incremento el número de paquetes acumulados
+       %tam_acumulado=tam_acumulado + entrada(i,3) + entrada(i,4) %se acumula el tamaño del payload UDP y de la cabecera
+       %retention_acumulado = retention_acumulado + (instante_siguiente - instante)*num_acumulados;   
+       
+   else %se envía
+       %salida = [salida ; instante-instante_anterior tam_acumulado retention_acumulado/num_acumulados]
+       
+       %si sólo hay un paquete, no se comprime. Se envía tal cual
+       if num_acumulados == 1
+           salida = [salida ; instante entrada(i,2) num_acumulados];
+           %guardo el retention time para todos los paquetes que se envían
+           %el paquete que desencadena el envío tiene retention time nulo
+           entrada(i,6)=0;
+           entrada(i,7)=instante;
+       else
+           %si hay varios, se envían todos
+           salida = [salida ; instante tam_acumulado+(num_acumulados*MUX_HEADER)+COMMON_HEADER-QUITAR_HEADER num_acumulados];
+           %calculo el retention time de cada paquete y lo pongo en la sexta
+           %columna de entrada
+           %también calculo el momento del envío y lo pongo en la séptima
+           %columna de entrada
+           for l=1:num_acumulados-1
+               entrada(i-l,6)= instante - entrada(i-l,1);
+               entrada(i-l,7)= instante;
+           end
+       end    
+
+       %actualizo variables
+       ultimo_envio=instante;
+       num_acumulados=0;
+       tam_acumulado=0;    
+   end
+end
+
+%añado a salida una columna de ceros para poner la diferencia de tiempos
+salida=[salida zeros(length(salida(:,1)),1)]; 
+for i=1:length(salida(:,1))-1
+    salida(i,4)=salida(i+1,1)-salida(i,1);
+end
+
+%Evito que queden valores -1 en entrada(:,6), borrando los últimos
+%paquetes, que no se envían
+
+
+%preparo la parte común del nombre de los ficheros de salida
+nombre_archivos_salida = strcat(nombre_archivos,'_TO_',num2str(TIMEOUT),'_NP_',num2str(NUMPAQUETES),'_TH_',num2str(PACKET_SIZE_TRESHOLD),'_FM_',num2str(F_MAX_PERIOD));
+%escribo el fichero de tiempos absolutos de envío
+%dlmwrite(strcat(nombre_archivos_salida,'_time.txt'),salida(:,1),'newline', 'pc','precision','%i');
+%escribo el fichero de diferencias de tiempos de envío
+dlmwrite(strcat(nombre_archivos_salida,'_diftime.txt'),salida(:,4),'newline', 'pc','precision','%i');
+%escribo el fichero de tamaños de salida (en payload UDP).
+% Hay que sumarle 28 para obtener el tamaño IP
+dlmwrite(strcat(nombre_archivos_salida,'_size.txt'),salida(:,2),'newline', 'pc');

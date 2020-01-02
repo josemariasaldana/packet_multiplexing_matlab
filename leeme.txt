@@ -1,0 +1,4 @@
+el programa "bucle_multiplexar_games_vX" es el que se debe ejecutar. Hace una serie de pruebas, con las siguientes variables:
+
+- diferentes valores del periodo o timeout
+- diferentes números de jugadores

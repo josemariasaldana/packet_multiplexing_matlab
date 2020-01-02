@@ -1,0 +1,18 @@
+file_nativo = fopen('nativo.txt','w')   
+for rr=1:size(nativo_con_repeticiones,1)
+    for ss=1:size(nativo_con_repeticiones,2) %para cada dato
+        fprintf(file_nativo,'%6.4f \t',nativo_con_repeticiones(rr,ss));
+    end
+    fprintf(file_nativo,'\n');
+end
+    fclose(file_nativo)
+    
+    diferencia_tiempos = nativo_con_repeticiones(:,4)-nativo_con_repeticiones(:,1);
+    file_diferencia = fopen('diferencia.txt','w')   
+for rr=1:size(nativo_con_repeticiones,1)
+    for ss=1:size(nativo_con_repeticiones,2) %para cada dato
+        fprintf(file_nativo,'%6.4f \t',nativo_con_repeticiones(rr,ss));
+    end
+    fprintf(file_nativo,'\n');
+end
+    fclose(file_nativo)
